@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RTI Filing Agent</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+:root{--bg:#EEF1F6;--card:#fff;--ink:#14213D;--mut:#566079;--line:#D3D9E5;--acc:#2744A8;--onacc:#fff;--ok:#1F7A4D;--warn:#9A5B00;--bad:#B3262E;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0E1424;--card:#172038;--ink:#E8ECF6;--mut:#9AA5C0;--line:#2A3558;--acc:#8FA8FF;--onacc:#0E1424;--ok:#58C38B;--warn:#E0A94A;--bad:#FF7B83}}
+:root[data-theme="dark"]{--bg:#0E1424;--card:#172038;--ink:#E8ECF6;--mut:#9AA5C0;--line:#2A3558;--acc:#8FA8FF;--onacc:#0E1424;--ok:#58C38B;--warn:#E0A94A;--bad:#FF7B83}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Source Sans 3",system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:20px 16px 56px}
+h1,h2{font-family:"Source Serif 4",Georgia,serif;margin:0}
+h1{font-size:30px;line-height:1.15}
+h2{font-size:21px;margin:32px 0 10px}
+p{margin:6px 0}.mut{color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:12px}
+label{font-weight:600;display:block;margin:10px 0 4px}
+textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px}
+textarea{min-height:92px;resize:vertical}
+button{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;border:1px solid var(--acc);background:var(--acc);color:var(--onacc);cursor:pointer}
+button.alt{background:transparent;color:var(--acc)}
+button.chip{font-weight:400;font-size:14px;padding:6px 10px;border-color:var(--line);color:var(--ink);background:transparent}
+button:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.step{border-left:4px solid var(--line);padding:4px 0 4px 12px;margin:10px 0}
+.step.ok{border-color:var(--ok)}.step.warn{border-color:var(--warn)}.step.bad{border-color:var(--bad)}
+.step b{display:block}
+.tag{font-weight:600}.tag.ok{color:var(--ok)}.tag.warn{color:var(--warn)}.tag.bad{color:var(--bad)}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font:14px/1.5 "Source Sans 3",system-ui,sans-serif;margin:8px 0}
+.num{font-family:"Source Serif 4",Georgia,serif;font-size:26px;font-weight:700;word-break:break-all}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:15px}.kv span:nth-child(odd){color:var(--mut)}
+.scroll{overflow-x:auto}
+small{color:var(--mut)}
+</style></head>
+<body><main>
+<h1>RTI Filing Agent</h1>
+<p class="mut">Describe the information you want from a government office. The agent decides whether it is an RTI request, picks the authority, drafts the application, and files it on the mock RTI portal only after you approve.</p>
+
+<div class="card">
+<label for="q">What information do you want?</label>
+<textarea id="q" placeholder="Example: How much was spent on road repair in Ward 12 during 2024-25?"></textarea>
+<div class="row" id="chips"></div>
+<label for="st">State</label>
+<select id="st"></select>
+<div class="row"><button id="go">Draft my RTI</button></div>
+</div>
+
+<div id="out" aria-live="polite"></div>
+
+<h2>KPIs</h2>
+<p class="mut">Live counts from what you do on this page.</p>
+<div class="card" id="kpi"></div>
+<div class="card"><p><b>Pilot targets</b> <small>(to measure with real users; not measured yet)</small></p><ul style="margin:6px 0;padding-left:20px"><li>Routing accuracy of 90% or more on 200 labelled requests</li><li>Fewer than 5% rejected for wrong authority</li><li>Under 2 minutes from request to ready draft</li><li>100% of filings explicitly approved by the citizen</li><li>0 filings that ask for a named person’s personal data</li><li>70% or more of users file successfully on the first attempt</li></ul></div>
+<h2>Mock RTI portal registry</h2>
+<div class="card" id="reg"><p class="mut">Nothing filed yet.</p></div>
+
+<h2>Official test cases</h2>
+<p class="mut">Runs the same agent on each scenario and records input, expected result, actual result and evidence.</p>
+<div class="row"><button id="runall">Run all 4 test cases</button></div>
+<div id="tests"></div>
+</main>
+<script>
+const STATES={AP:"Andhra Pradesh",AR:"Arunachal Pradesh",AS:"Assam",BR:"Bihar",CG:"Chhattisgarh",GA:"Goa",GJ:"Gujarat",HR:"Haryana",HP:"Himachal Pradesh",JH:"Jharkhand",KA:"Karnataka",KL:"Kerala",MP:"Madhya Pradesh",MH:"Maharashtra",MN:"Manipur",ML:"Meghalaya",MZ:"Mizoram",NL:"Nagaland",OD:"Odisha",PB:"Punjab",RJ:"Rajasthan",SK:"Sikkim",TN:"Tamil Nadu",TS:"Telangana",TR:"Tripura",UP:"Uttar Pradesh",UK:"Uttarakhand",WB:"West Bengal",AN:"Andaman and Nicobar Islands",CH:"Chandigarh",DN:"Dadra and Nagar Haveli and Daman and Diu",DL:"Delhi",JK:"Jammu and Kashmir",LA:"Ladakh",LD:"Lakshadweep",PY:"Puducherry"};
+const DEPTS=[
+ {k:/road|pothole|bridge|highway|footpath|সড়ক|রাস্তা|सड़क/i,n:"Public Works Department",id:"PWD"},
+ {k:/water|sewer|drain|জল|पानी/i,n:"Water Supply and Sewerage Board",id:"WSB"},
+ {k:/school|teacher|scholarship|education|স্কুল|स्कूल/i,n:"Department of School Education",id:"DSE"},
+ {k:/ration|food grain|pds/i,n:"Food and Civil Supplies Department",id:"FCS"},
+ {k:/police|fir\b|crime/i,n:"Home (Police) Department",id:"POL"},
+ {k:/hospital|health|doctor|medicine/i,n:"Health and Family Welfare Department",id:"HFW"},
+ {k:/electric|power cut|transformer|meter reading|বিদ্যুৎ|बिजली/i,n:"Power (Electricity) Department",id:"ELE"},
+ {k:/garbage|waste|property tax|trade licen|municipal/i,n:"Urban Local Body (Municipality)",id:"ULB"},
+ {k:/land record|mutation|patta|khatian|revenue/i,n:"Revenue Department",id:"REV"},
+ {k:/mgnrega|nrega|panchayat|job card/i,n:"Rural Development Department",id:"RDD"},
+ {k:/driving licen|registration certificate|transport|vehicle/i,n:"Transport Department",id:"TRN"},
+ {k:/pension|disabilit|welfare scheme/i,n:"Social Welfare Department",id:"SWD"}];
+const SAMPLES=[
+ ["Road spending","How much was spent on road repair in Ward 12 during 2024-25?","KA"],
+ ["Fix a complaint","Please fix the broken streetlight outside my house, I have complained twice.","KA"],
+ ["Someone’s data","Give me the home address and salary of Mr. Rakesh Sharma, the road engineer.","MH"],
+ ["Tender copy","Copy of the tender order for drain cleaning in Ward 5 for 2025.","TN"]];
+const portal={filed:{},seq:1000};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=d=>d.toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"});
+let uid=0;const K={n:0,rti:0,grv:0,flag:0,ask:0,filed:0,dup:0,tc:null};window.LAST="";
+
+function analyse(text,state,hint){
+ const t=text.trim(),steps=[],rec={id:"R"+(++uid),text:t,state,steps,status:null,dept:null,ev:[]};
+ const miss=[];if(t.length<15)miss.push("a clear description of the information");if(!state)miss.push("state");
+ if(miss.length){steps.push({t:"Collect details",r:"Missing: "+miss.join(", ")+". The agent asks the citizen instead of guessing.",s:"warn"});rec.status="uncertain";return rec}
+ const dept=DEPTS.find(d=>d.k.test(t))||(hint&&hint.dept)||null;
+ steps.push({t:"Collect details",r:"Information: “"+t+"”. State: "+STATES[state]+". Department: "+(dept?dept.n:"not clear from the request")+".",s:dept?"ok":"warn"});
+ const info=/(how much|how many|copy of|details of|list of|records? of|spent|expenditure|sanctioned|budget|status of|file noting|tender|order|information|कितना|खर्च|কত|খরচ)/i.test(t);
+ const grv=/(fix|resolve|not working|complain|please act|broken|clean (the|my)|pothole near|ठीक करो|ঠিক করুন)/i.test(t);
+ if(hint&&hint.intent&&hint.intent!=="unclear"&&((hint.intent==="grievance")!==(grv&&!info))){steps.push({t:"RTI or grievance?",r:"The AI reader and the rules disagree, so the agent will not guess. Please confirm: do you want records (RTI) or a problem fixed (grievance)?",s:"warn"});rec.status="uncertain";return rec}
+ if(grv&&!info){steps.push({t:"RTI or grievance?",r:"The citizen wants a problem solved, not records. RTI only gives access to information, so this goes to the grievance portal.",s:"bad"});rec.status="redirected";rec.ev.push("Redirect target: mock-grievance://"+state+"/lodge");return rec}
+ steps.push({t:"RTI or grievance?",r:"The request asks for records or figures, so it is an RTI request.",s:"ok"});
+ const pw=/(salary|phone number|mobile number|home address|aadhaar|pan number|bank account|medical record|personal (details|data|information))/i.test(t);
+ const pr=/(of|about)\s+((mr|mrs|ms|shri|smt|dr)\b\.?|my neighbou?r)/i.test(t)||/(of|about)\s+[A-Z][a-z]+ [A-Z][a-z]+/.test(t);
+ if((pw&&pr)||(hint&&hint.priv)){steps.push({t:"Third-party privacy check",r:"Asks for a named person’s personal data. This may be exempt under Section 8(1)(j) of the RTI Act. Flagged for human review; not filed.",s:"bad"});rec.status="flagged";rec.ev.push("Rule: personal-data keyword + named individual");return rec}
+ steps.push({t:"Third-party privacy check",r:"No personal data of a named individual requested.",s:"ok"});
+ if(!dept){steps.push({t:"Choose authority",r:"Cannot tell which public authority holds this record. Returning an uncertain state and asking the citizen.",s:"warn"});rec.status="uncertain";return rec}
+ rec.dept=dept;
+ const src="mock-rti://"+state+"/authorities/"+dept.id;
+ rec.ev.push("Source: "+src+" (retrieved "+new Date().toLocaleTimeString("en-IN")+")");
+ steps.push({t:"Choose authority",r:"Public Information Officer, "+dept.n+", "+STATES[state]+". Matched on keywords in the request.",s:"ok"});
+ rec.draft="To,\nThe Public Information Officer,\n"+dept.n+", "+STATES[state]+"\n\nSubject: Application under Section 6(1) of the RTI Act, 2005\n\nPlease provide the following information:\n"+t+"\n\nApplication fee: Rs 10, payable online.";
+ steps.push({t:"Human approval",r:"Filing and the Rs 10 fee cannot be undone. Waiting for the citizen to approve.",s:"warn"});
+ rec.status="awaiting_approval";return rec;
+}
+function fileRTI(rec){
+ const key=(rec.state+"|"+rec.dept.id+"|"+rec.text.toLowerCase());
+ if(portal.filed[key])return{dup:true,entry:portal.filed[key]};
+ const num="RTI/"+rec.state+"/"+rec.dept.id+"/"+new Date().getFullYear()+"/"+(++portal.seq);
+ const d=new Date();d.setDate(d.getDate()+30);
+ const e={num,deptId:rec.dept.id,dept:rec.dept.n,state:rec.state,fee:10,filed:fmt(new Date()),deadline:fmt(d),text:rec.text};
+ portal.filed[key]=e;return{dup:false,entry:e};
+}
+function verify(rec,num){
+ const e=Object.values(portal.filed).find(x=>x.num===num);
+ if(!e)return{ok:false,msg:"Portal has no record of "+num+". Filing is pending or failed."};
+ const ok=e.deptId===rec.dept.id&&e.fee===10;
+ return{ok,msg:"Portal shows "+e.num+" under "+e.dept+", fee Rs "+e.fee+". Intended: "+rec.dept.n+", Rs 10. "+(ok?"Match.":"MISMATCH.")};
+}
+function stepsHTML(rec){return rec.steps.map(s=>'<div class="step '+s.s+'"><b>'+esc(s.t)+'</b>'+esc(s.r)+'</div>').join("")}
+function evHTML(rec){return rec.ev.length?'<p><small>'+rec.ev.map(esc).join("<br>")+"</small></p>":""}
+function resultHTML(rec,f,v){
+ const e=f.entry;
+ return '<div class="step '+(v.ok?"ok":"bad")+'"><b>Filed on mock portal</b>'+(f.dup?"Duplicate blocked: this request was already filed, so the same number is returned.":"Filed after your approval.")+'</div>'
+ +'<p class="mut">RTI registration number</p><div class="num">'+esc(e.num)+'</div>'
+ +'<div class="kv" style="margin-top:8px"><span>Response due</span><span>'+esc(e.deadline)+' (30 days)</span><span>Authority</span><span>'+esc(e.dept)+'</span><span>Fee paid</span><span>Rs '+e.fee+'</span></div>'
+ +'<p><span class="tag '+(v.ok?"ok":"bad")+'">Verification:</span> '+esc(v.msg)+'</p>'
+ +'<p><b>To file this for real</b> <small>(this page files only on the mock portal)</small></p><ol style="margin:6px 0;padding-left:20px"><li>Copy the application text.</li><li>Central government office: use rtionline.gov.in. State office: use that state’s RTI portal, or post it to the Public Information Officer.</li><li>Pay the fee yourself (Rs 10 for central offices; states differ; BPL applicants are exempt).</li><li>Complete any OTP or CAPTCHA yourself. This agent never bypasses them.</li><li>Note the registration number. A reply is due in 30 days; if none comes, file a first appeal.</li></ol><div class="row"><button class="alt" onclick="copyApp(this)">Copy application text</button></div>';
+}
+function copyApp(b){const t=window.LAST;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{b.textContent="Copied"},()=>{b.textContent="Copy failed: select the draft text instead"})}
+async function llmRead(text){
+ let s=null;try{s=await claude.use("sample")}catch(e){}
+ if(!s)return null;
+ try{
+  const ids=DEPTS.map(d=>d.id+" = "+d.n).join("; ");
+  return await s.json("You read citizen requests for an Indian RTI (Right to Information) assistant. The request may be in English, Hindi, Bengali or Kokborok. Reply with ONLY JSON: {\"language\":string,\"intent\":\"rti\"|\"grievance\"|\"unclear\",\"department_id\":one id from ["+ids+"] or \"unknown\",\"asks_personal_data_of_named_person\":boolean,\"information_summary\":string in English,\"confidence\":number 0 to 1}. intent is rti only if the person asks for records, figures or documents; grievance if they want a problem fixed.\nRequest: "+JSON.stringify(text),{modelTier:"quick",cache:false});
+ }catch(e){return{error:(e&&e.code)||"failed"}}
+}
+function aiHTML(rec){const a=rec.ai;if(a===undefined)return"";
+ if(a===null)return'<div class="step warn"><b>AI reader</b>Not available here, so the rule-based reader handled this request.</div>';
+ if(a.error)return'<div class="step warn"><b>AI reader</b>Could not run ('+esc(a.error)+'). The rule-based reader handled this request.</div>';
+ return'<div class="step ok"><b>AI reader</b>Language: '+esc(a.language)+'. Intent: '+esc(a.intent)+'. Department: '+esc(a.department_id)+'. Confidence: '+Math.round(100*(a.confidence||0))+'%.<br>In English: '+esc(a.information_summary)+'<br><small>The rules double-check the AI. If they disagree, the agent asks you instead of guessing. The AI can only make a request safer or fill a gap.</small></div>'}
+function show(rec){K.n++;({redirected:()=>K.grv++,flagged:()=>K.flag++,uncertain:()=>K.ask++,awaiting_approval:()=>K.rti++})[rec.status]();window.LAST=rec.draft||"";renderKPI();
+ const o=$("#out");let h='<h2>Agent decision</h2><div class="card">'+aiHTML(rec)+stepsHTML(rec)+evHTML(rec);
+ if(rec.status==="redirected")h+='<p><b>Next step:</b> lodge this on the grievance portal. No RTI fee is charged.</p>';
+ if(rec.status==="flagged")h+='<p><b>Next step:</b> a human reviews or the citizen rewrites the request without personal data.</p>';
+ if(rec.status==="awaiting_approval")h+='<p><b>Draft application</b></p><pre>'+esc(rec.draft)+'</pre><p><b>Proposed action:</b> file to '+esc(rec.dept.n)+', pay Rs 10.</p><div class="row"><button id="ok">Approve and file</button><button class="alt" id="no">Reject</button></div><div id="res"></div>';
+ o.innerHTML=h+"</div>";
+ if(rec.status==="awaiting_approval"){
+  const run=()=>{const f=fileRTI(rec);const v=verify(rec,f.entry.num);f.dup?K.dup++:K.filed++;renderKPI();$("#res").innerHTML=resultHTML(rec,f,v)+'<div class="row"><button class="alt" id="retry">Retry filing (duplicate test)</button></div>';renderReg();$("#retry").onclick=run};
+  $("#ok").onclick=run;$("#no").onclick=()=>{$("#res").innerHTML='<div class="step warn"><b>Rejected</b>Nothing was filed or paid.</div>'};
+ }
+}
+function renderKPI(){const p=a=>K.n?Math.round(100*a/K.n)+"%":"-";const m=[["Requests handled",K.n],["Valid RTI drafts",K.rti+" ("+p(K.rti)+")"],["Sent to grievance",K.grv+" ("+p(K.grv)+")"],["Privacy flags",K.flag],["Asked for clarification",K.ask],["Filed after approval",K.filed],["Duplicates blocked",K.dup],["Test cases passed",K.tc==null?"run the tests":K.tc+" of 4"]];$("#kpi").innerHTML='<div class="kv" style="grid-template-columns:1fr auto">'+m.map(x=>"<span>"+x[0]+"</span><b>"+x[1]+"</b>").join("")+"</div>"}
+function renderReg(){
+ const a=Object.values(portal.filed);
+ $("#reg").innerHTML=a.length?'<div class="scroll">'+a.map(e=>'<div class="step ok"><b>'+esc(e.num)+'</b>'+esc(e.dept)+' · filed '+esc(e.filed)+' · due '+esc(e.deadline)+'<br><small>'+esc(e.text)+'</small></div>').join("")+"</div>":'<p class="mut">Nothing filed yet.</p>';
+}
+const TCS=[
+ {id:"TC1",s:"Request for road repair spending",exp:"Filed to the correct authority",i:SAMPLES[0],pass:(r,f)=>f&&r.dept.id==="PWD"},
+ {id:"TC2",s:"User wants a complaint fixed, not information",exp:"Redirected to grievance portal",i:SAMPLES[1],pass:r=>r.status==="redirected"},
+ {id:"TC3",s:"Request asks for a third party’s personal data",exp:"Flagged",i:SAMPLES[2],pass:(r,f)=>r.status==="flagged"&&!f},
+ {id:"TC4",s:"Rs 10 RTI fee",exp:"Approved before filing",i:SAMPLES[3],pass:(r,f,gate)=>gate&&gate.before===0&&!!f}];
+function runTC(tc){
+ const before=Object.keys(portal.filed).length;
+ const rec=analyse(tc.i[1],tc.i[2]);let f=null,v=null,gate=null,actual="";
+ if(rec.status==="awaiting_approval"){
+  const mid=Object.keys(portal.filed).length;gate={before:mid-before};
+  f=fileRTI(rec);v=verify(rec,f.entry.num);
+  actual="Paused for approval with 0 filings made; after simulated approval filed as "+f.entry.num+" (due "+f.entry.deadline+"). "+v.msg;
+ }else actual=rec.steps[rec.steps.length-1].r;
+ const ok=tc.pass(rec,f,gate);
+ return'<div class="card"><p><b>'+tc.id+'</b> · '+esc(tc.s)+' <span class="tag '+(ok?"ok":"bad")+'">'+(ok?"Pass":"Fail")+'</span></p><div class="kv"><span>Input</span><span>'+esc(tc.i[1])+' ('+STATES[tc.i[2]]+')</span><span>Expected</span><span>'+esc(tc.exp)+'</span><span>Actual</span><span>'+esc(actual)+'</span><span>Evidence</span><span>'+(rec.ev.map(esc).join("; ")||"Decision trace above")+'</span></div>'+(f?'<p><small>The test harness simulates the approval click. In the live demo above, a person clicks Approve.</small></p>':"")+"</div>";
+}
+$("#runall").onclick=()=>{const h=TCS.map(runTC);K.tc=h.filter(x=>x.includes(">Pass<")).length;$("#tests").innerHTML=h.join("");renderReg();renderKPI()};
+$("#st").innerHTML='<option value="">Choose state</option>'+Object.entries(STATES).map(([k,v])=>'<option value="'+k+'">'+v+"</option>").join("");
+$("#chips").innerHTML=SAMPLES.map((s,i)=>'<button class="chip" data-i="'+i+'">'+esc(s[0])+"</button>").join("");
+$("#chips").onclick=e=>{const b=e.target.closest("button");if(!b)return;const s=SAMPLES[b.dataset.i];$("#q").value=s[1];$("#st").value=s[2]};
+$("#go").onclick=async()=>{const q=$("#q").value,st=$("#st").value,b=$("#go");b.disabled=true;b.textContent="Reading your request...";
+ const ai=await llmRead(q);let hint=null;
+ if(ai&&!ai.error&&ai.confidence>=0.7)hint={intent:ai.intent,priv:!!ai.asks_personal_data_of_named_person,dept:DEPTS.find(d=>d.id===ai.department_id)||null};
+ const rec=analyse(q,st,hint);rec.ai=ai;
+ if(rec.draft&&ai&&!ai.error&&ai.information_summary)rec.draft=rec.draft.replace("\n\nApplication fee","\n(English summary: "+ai.information_summary+")\n\nApplication fee");
+ show(rec);b.disabled=false;b.textContent="Draft my RTI"};renderKPI();
+</script></body></html>
