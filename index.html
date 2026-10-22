@@ -38,6 +38,14 @@ small{color:var(--mut)}
 <h1>RTI Filing Agent</h1>
 <p class="mut">Describe the information you want from a government office. The agent decides whether it is an RTI request, picks the authority, drafts the application, and files it on the mock RTI portal only after you approve.</p>
 
+<div class="card" id="voice">
+<p><b>Voice assistant</b> <small>Listen to the agent and answer by speaking. No typing needed.</small></p>
+<label for="vl">Language</label>
+<select id="vl"><option value="en">English</option><option value="hi">हिन्दी (Hindi)</option><option value="bn">বাংলা (Bengali)</option></select>
+<div class="row"><button id="vg">Start voice guide</button><button class="alt" id="vs">Listen again</button><button class="alt" id="vm">Speak my request</button></div>
+<p id="vt" class="mut" role="status" aria-live="polite"><small>Works best in Chrome. Allow the microphone when asked.</small></p>
+</div>
+
 <div class="card">
 <label for="q">What information do you want?</label>
 <textarea id="q" placeholder="Example: How much was spent on road repair in Ward 12 during 2024-25?"></textarea>
@@ -141,14 +149,14 @@ async function llmRead(text){
  if(!s)return null;
  try{
   const ids=DEPTS.map(d=>d.id+" = "+d.n).join("; ");
-  return await s.json("You read citizen requests for an Indian RTI (Right to Information) assistant. The request may be in English, Hindi, Bengali or Kokborok. Reply with ONLY JSON: {\"language\":string,\"intent\":\"rti\"|\"grievance\"|\"unclear\",\"department_id\":one id from ["+ids+"] or \"unknown\",\"asks_personal_data_of_named_person\":boolean,\"information_summary\":string in English,\"confidence\":number 0 to 1}. intent is rti only if the person asks for records, figures or documents; grievance if they want a problem fixed.\nRequest: "+JSON.stringify(text),{modelTier:"quick",cache:false});
+  return await s.json("You read citizen requests for an Indian RTI (Right to Information) assistant. The request may be in English, Hindi or Bengali. Reply with ONLY JSON: {\"language\":string,\"intent\":\"rti\"|\"grievance\"|\"unclear\",\"department_id\":one id from ["+ids+"] or \"unknown\",\"asks_personal_data_of_named_person\":boolean,\"information_summary\":string in English,\"confidence\":number 0 to 1}. intent is rti only if the person asks for records, figures or documents; grievance if they want a problem fixed.\nRequest: "+JSON.stringify(text),{modelTier:"quick",cache:false});
  }catch(e){return{error:(e&&e.code)||"failed"}}
 }
 function aiHTML(rec){const a=rec.ai;if(a===undefined)return"";
  if(a===null)return'<div class="step warn"><b>AI reader</b>Not available here, so the rule-based reader handled this request.</div>';
  if(a.error)return'<div class="step warn"><b>AI reader</b>Could not run ('+esc(a.error)+'). The rule-based reader handled this request.</div>';
  return'<div class="step ok"><b>AI reader</b>Language: '+esc(a.language)+'. Intent: '+esc(a.intent)+'. Department: '+esc(a.department_id)+'. Confidence: '+Math.round(100*(a.confidence||0))+'%.<br>In English: '+esc(a.information_summary)+'<br><small>The rules double-check the AI. If they disagree, the agent asks you instead of guessing. The AI can only make a request safer or fill a gap.</small></div>'}
-function show(rec){K.n++;({redirected:()=>K.grv++,flagged:()=>K.flag++,uncertain:()=>K.ask++,awaiting_approval:()=>K.rti++})[rec.status]();window.LAST=rec.draft||"";renderKPI();
+function show(rec){window.CUR=rec;K.n++;({redirected:()=>K.grv++,flagged:()=>K.flag++,uncertain:()=>K.ask++,awaiting_approval:()=>K.rti++})[rec.status]();window.LAST=rec.draft||"";renderKPI();
  const o=$("#out");let h='<h2>Agent decision</h2><div class="card">'+aiHTML(rec)+stepsHTML(rec)+evHTML(rec);
  if(rec.status==="redirected")h+='<p><b>Next step:</b> lodge this on the grievance portal. No RTI fee is charged.</p>';
  if(rec.status==="flagged")h+='<p><b>Next step:</b> a human reviews or the citizen rewrites the request without personal data.</p>';
@@ -190,4 +198,45 @@ $("#go").onclick=async()=>{const q=$("#q").value,st=$("#st").value,b=$("#go");b.
  const rec=analyse(q,st,hint);rec.ai=ai;
  if(rec.draft&&ai&&!ai.error&&ai.information_summary)rec.draft=rec.draft.replace("\n\nApplication fee","\n(English summary: "+ai.information_summary+")\n\nApplication fee");
  show(rec);b.disabled=false;b.textContent="Draft my RTI"};renderKPI();
+const SS=window.speechSynthesis,SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const VC={en:"en-IN",hi:"hi-IN",bn:"bn-IN"},VL=()=>$("#vl").value;
+const T={
+en:{ask_q:"What information do you want from the government office? Please speak now.",ask_state:"Which state are you in? Say the name of the state.",bad_state:"I did not understand the state. Please choose it on the screen.",nohear:"I did not hear anything. Tap Speak my request to try again.",uncertain:"I need more details. Please explain your request more clearly.",redirected:"This is a complaint, not a request for information. Please lodge it on the grievance portal. No RTI fee is charged.",flagged:"This asks for a named person’s personal data, so it will not be filed. Please ask again without personal data.",approve:"I have drafted an application to {d}. The fee is ten rupees. Say yes to file it, or no to cancel.",filed:"Your application is filed. Your RTI number is {n}. The reply is due by {d}.",cancel:"Okay, nothing was filed.",unclear:"I did not get a clear answer, so nothing was filed."},
+hi:{ask_q:"आप सरकारी दफ़्तर से कौन सी जानकारी चाहते हैं? अब बोलिए।",ask_state:"आप किस राज्य में हैं? राज्य का नाम बोलिए।",bad_state:"मुझे राज्य समझ नहीं आया। कृपया स्क्रीन पर राज्य चुनिए।",nohear:"मुझे कुछ सुनाई नहीं दिया। दोबारा कोशिश के लिए Speak my request बटन दबाइए।",uncertain:"मुझे और जानकारी चाहिए। कृपया अपना अनुरोध साफ़ बताइए।",redirected:"यह जानकारी का अनुरोध नहीं, शिकायत है। इसे शिकायत पोर्टल पर दर्ज करें। कोई आरटीआई शुल्क नहीं लगेगा।",flagged:"इसमें किसी व्यक्ति का निजी डेटा माँगा गया है, इसलिए यह फ़ाइल नहीं होगा। कृपया निजी डेटा के बिना दोबारा बताइए।",approve:"मैंने {d} के लिए आवेदन तैयार किया है। शुल्क दस रुपये है। फ़ाइल करने के लिए हाँ बोलिए, रद्द करने के लिए नहीं बोलिए।",filed:"आवेदन फ़ाइल हो गया। आपका आरटीआई नंबर {n} है। जवाब की अंतिम तारीख {d} है।",cancel:"ठीक है, कुछ फ़ाइल नहीं हुआ।",unclear:"मुझे उत्तर साफ़ नहीं मिला, इसलिए कुछ फ़ाइल नहीं हुआ।"},
+bn:{ask_q:"আপনি সরকারি দপ্তর থেকে কী তথ্য চান? এখন বলুন।",ask_state:"আপনি কোন রাজ্যে আছেন? রাজ্যের নাম বলুন।",bad_state:"আমি রাজ্যটি বুঝতে পারিনি। অনুগ্রহ করে স্ক্রিনে রাজ্য বেছে নিন।",nohear:"আমি কিছু শুনতে পাইনি। আবার চেষ্টা করতে Speak my request বোতাম চাপুন।",uncertain:"আমার আরও তথ্য দরকার। অনুগ্রহ করে আপনার অনুরোধটি পরিষ্কার করে বলুন।",redirected:"এটি তথ্যের অনুরোধ নয়, অভিযোগ। এটি অভিযোগ পোর্টালে জমা দিন। কোনো আরটিআই ফি লাগবে না।",flagged:"এতে কোনো ব্যক্তির ব্যক্তিগত তথ্য চাওয়া হয়েছে, তাই এটি জমা হবে না। ব্যক্তিগত তথ্য ছাড়া আবার বলুন।",approve:"আমি {d}-এর জন্য আবেদন তৈরি করেছি। ফি দশ টাকা। জমা দিতে হ্যাঁ বলুন, বাতিল করতে না বলুন।",filed:"আবেদন জমা হয়েছে। আপনার আরটিআই নম্বর {n}। উত্তরের শেষ তারিখ {d}।",cancel:"ঠিক আছে, কিছু জমা হয়নি।",unclear:"আমি উত্তর বুঝতে পারিনি, তাই কিছু জমা হয়নি।"}};
+const SN={hi:"आंध्र प्रदेश|आन्ध्र प्रदेश,अरुणाचल,असम|आसाम,बिहार,छत्तीसगढ़|छत्तीसगढ,गोवा,गुजरात,हरियाणा,हिमाचल,झारखंड|झारखण्ड,कर्नाटक,केरल|केरला,मध्य प्रदेश,महाराष्ट्र,मणिपुर,मेघालय,मिजोरम|मिज़ोरम,नागालैंड,ओडिशा|उड़ीसा|ओड़िशा,पंजाब,राजस्थान,सिक्किम,तमिल नाडु|तमिलनाडु,तेलंगाना,त्रिपुरा,उत्तर प्रदेश,उत्तराखंड|उत्तराखण्ड,पश्चिम बंगाल,अंडमान,चंडीगढ़|चंडीगढ,दादरा,दिल्ली,जम्मू,लद्दाख,लक्षद्वीप,पुदुचेरी|पुडुचेरी|पांडिचेरी".split(","),
+bn:"অন্ধ্রপ্রদেশ|অন্ধ্র প্রদেশ,অরুণাচল,আসাম|অসম,বিহার,ছত্তিশগড়,গোয়া,গুজরাট,হরিয়ানা,হিমাচল,ঝাড়খণ্ড,কর্ণাটক|কর্নাটক,কেরালা|কেরল,মধ্যপ্রদেশ|মধ্য প্রদেশ,মহারাষ্ট্র,মণিপুর|মনিপুর,মেঘালয়,মিজোরাম,নাগাল্যান্ড,ওড়িশা|ওডিশা|উড়িষ্যা,পাঞ্জাব|পঞ্জাব,রাজস্থান,সিকিম,তামিলনাড়ু|তামিল নাড়ু,তেলঙ্গানা|তেলেঙ্গানা,ত্রিপুরা,উত্তরপ্রদেশ|উত্তর প্রদেশ,উত্তরাখণ্ড,পশ্চিমবঙ্গ|পশ্চিম বঙ্গ,আন্দামান,চণ্ডীগড়|চন্ডীগড়,দাদরা,দিল্লি,জম্মু,লাদাখ,লক্ষদ্বীপ|লাক্ষাদ্বীপ,পুদুচেরি|পুদুচেরী".split(",")};
+const YES=["yes","yeah","ok","okay","approve","haan","han","हाँ","हां","हा","जी","ठीक","হ্যাঁ","হ্যা","হাঁ"],NO=["no","nahi","nahin","cancel","stop","नहीं","नही","रद्द","না","নাহ","বাতিল"];
+const words=x=>x.toLowerCase().replace(/[.,!?।]/g," ").split(/\s+/);
+const setStat=m=>{$("#vt").innerHTML="<small>"+esc(m)+"</small>"};
+function pickState(x){const n=s=>s.normalize("NFC").toLowerCase().replace(/\s+/g,""),s=n(x),ks=Object.keys(STATES);
+ for(let i=0;i<ks.length;i++){const L=[STATES[ks[i]],STATES[ks[i]].replace(/ and .*/,"")].concat(SN.hi[i].split("|"),SN.bn[i].split("|"));if(L.some(v=>s.includes(n(v))))return ks[i]}return""}
+function say(x){return new Promise(res=>{if(!SS){setStat("Spoken replies are not supported in this browser.");return res()}
+ SS.cancel();const u=new SpeechSynthesisUtterance(x),l=VL(),vs=SS.getVoices();u.lang=VC[l];u.rate=0.9;
+ const v=vs.find(v=>v.lang.replace("_","-").toLowerCase().startsWith(l));if(v)u.voice=v;else if(vs.length)setStat("This device has no "+$("#vl").selectedOptions[0].text+" voice installed. Add one in the device text-to-speech settings.");
+ u.onend=u.onerror=()=>res();SS.speak(u)})}
+function hear(){return new Promise(res=>{if(!SR){setStat("Voice input is not supported in this browser. Please use Chrome.");return res("")}
+ const r=new SR();let got="";r.lang=VC[VL()];r.interimResults=false;r.maxAlternatives=1;
+ r.onresult=e=>{got=e.results[0][0].transcript};
+ r.onerror=e=>{setStat(e.error==="not-allowed"?"The microphone is blocked. Allow the microphone for this page in your browser settings.":"Could not hear you ("+e.error+"). Please try again.")};
+ r.onend=()=>res(got);setStat("Listening… speak now.");try{r.start()}catch(e){res("")}})}
+async function speakRec(){const r=window.CUR,t=T[VL()];if(!r)return say(t.ask_q);
+ if(r.status!=="awaiting_approval")return say(t[r.status]);
+ await say(t.approve.replace("{d}",r.dept.n+", "+STATES[r.state]));
+ const w=words(await hear());
+ if(w.some(x=>NO.includes(x))){$("#no").click();return say(t.cancel)}
+ if(!w.some(x=>YES.includes(x)))return say(t.unclear);
+ $("#ok").click();const n=$("#res .num"),d=$("#res .kv span:nth-child(2)");
+ if(n)await say(t.filed.replace("{n}",n.textContent.replace(/\//g," ")).replace("{d}",d?d.textContent.replace(" (30 days)",""):""))}
+async function guide(){const t=T[VL()];
+ await say(t.ask_q);const q=await hear();if(!q)return say(t.nohear);
+ $("#q").value=q;setStat("Heard: “"+q+"”");
+ await say(t.ask_state);const sk=pickState(await hear());if(!sk)return say(t.bad_state);
+ $("#st").value=sk;window.CUR=null;$("#go").click();
+ for(let i=0;i<150&&!window.CUR;i++)await new Promise(r=>setTimeout(r,200));
+ if(window.CUR)await speakRec()}
+$("#vg").onclick=guide;$("#vs").onclick=speakRec;
+$("#vm").onclick=async()=>{const x=await hear();if(x){$("#q").value=x;setStat("Heard: “"+x+"”")}};
+if(SS)SS.getVoices();
+
 </script></body></html>
